@@ -1,0 +1,28 @@
+<!--
+Polymer component to enable MPEG-DASH on video tags.
+
+This component enables:
+
+  - loading at startup of multiple sources (DASH or mp4/webm) and tracks via native tags
+  - manual switching between existing sources and tracks
+  - adding new and removing existing sources and tracks
+  - observing the DOM tree for changes (addition, removal or modification of sources and tracks)
+
+##### Example
+
+    <video-dash></video-dash>
+
+@element video-dash
+@blurb Polymer component to enable MPEG-DASH on video tags
+@status alpha
+@homepage http://frapontillo.github.io/video-dash
+-->
+
+<link rel="import" href="../polymer/polymer.html">
+
+<polymer-element name="video-dash" extends="video">
+
+  <script src="../dash.js/dist/dash.debug.js"></script>
+  <script src="video-dash.js"></script>
+
+</polymer-element>
