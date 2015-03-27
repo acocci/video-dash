@@ -29,9 +29,7 @@ Polymer('video-dash', {
     return this._player;
   },
 
-  _playDash: function(src) {
-    this._getDashPlayer().attachSource(src);
-  },
+  _manifest: undefined,
 
   _sourceTracks: undefined,
   get sourceTracks() {
@@ -77,23 +75,19 @@ Polymer('video-dash', {
       return;
     }
 
-    // init the available videos
-    this._sourceTracks = this.sourceTracks;
+    // reset the source tracks and streams
+    this._manifest = undefined;
+    this._sourceTracks = undefined;
+    this._dashStreams = undefined;
+    this._nativeStreams = undefined;
 
-    // TODO: consider removing every source and text, then enable those on demand
-
-    // if MSE is supported, get all of the available DASH streams
-    // (this gives priority to DASH streams)
-
+    // if MSE is supported, get all of the available DASH streams (always give priority to DASH streams)
     // if there's no DASH stream, get out of here and let the browser handle it
     if (this.dashStreams.length <= 0) {
       return;
     }
 
-    // TODO (maybe?) remove all non-DASH sources so they won't play
-    // this.removeNodes('source:not([type="application/dash+xml"])');
-
-    // attach the first DASH streams
+    // attach the first DASH stream
     if (this.dashStreams.length > 1) {
       console.info('More than one MPEG-DASH stream specified, selecting the first one...');
     }
@@ -101,6 +95,8 @@ Polymer('video-dash', {
   },
 
   setSource: function(src) {
+    var self = this;
+
     // reset the DASH player, if any
     if (this._player) {
       this._player.reset();
@@ -118,20 +114,41 @@ Polymer('video-dash', {
     }
     stream = stream[0];
 
-    // TODO: edit the original _sourceTracks
     if (stream.type === 'application/dash+xml') {
-      // DASH streams add new tracks, disable the native ones
-      // this will prevent automatic captioning if the DASH stream doesn't provide any track
-      // TODO: maybe remove (instead of disabling) native tracks by saving them in a temp state?
-      for (var t in this.textTracks) {
-        this.textTracks.item(t).mode = 'disabled';
-      }
-      this._playDash(stream.src);
+      // start playing the DASH stream
+      this._getDashPlayer().attachSource(stream.src);
+
+      // as soon as the manifest is available
+      this._getDashPlayer().adapter.system.getObject('manifestLoader').subscribe(
+        MediaPlayer.dependencies.ManifestLoader.eventList.ENAME_MANIFEST_LOADED, function() { },
+        function(event) {
+          self._manifest = event.data.manifest;
+          // find out if there is any subtitle/caption adaptation set
+          var dashTextTracks = self._manifest.Period.AdaptationSet.filter(function(adaptation) {
+            return (adaptation.mimeType === 'text/vtt');
+          }).length;
+          // if there is at least one subtitle/caption
+          if (dashTextTracks > 0) {
+            // disable all other captions
+            // TODO: find a way to remove all tracks (http://stackoverflow.com/questions/29306931/delete-a-texttrack-from-a-video)
+            for (var t in self.textTracks) {
+              self.textTracks.item(t).mode = 'disabled';
+            }
+          }
+        });
     } else {
       // enable a native source
       this.setAttribute('src', stream.src);
-      // TODO: enable native tracks (by re-adding them?)
+      // TODO: re-add all native tracks
     }
+  },
+
+  reload: function() {
+    return this.domReady();
+  },
+
+  load: function() {
+    return this.reload();
   }
 
 });
