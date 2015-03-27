@@ -115,6 +115,7 @@ Polymer('video-dash', {
     stream = stream[0];
 
     if (stream.type === 'application/dash+xml') {
+      
       // start playing the DASH stream
       this._getDashPlayer().attachSource(stream.src);
 
@@ -130,17 +131,32 @@ Polymer('video-dash', {
           // if there is at least one subtitle/caption
           if (dashTextTracks > 0) {
             // disable all other captions
-            // TODO: find a way to remove all tracks (http://stackoverflow.com/questions/29306931/delete-a-texttrack-from-a-video)
             for (var t in self.textTracks) {
+              if (self.textTracks.item(t).mode === 'showing') {
+                self._lastNativeTrack = t;
+              }
               self.textTracks.item(t).mode = 'disabled';
             }
           }
         });
+
     } else {
+
       // enable a native source
       this.setAttribute('src', stream.src);
-      // TODO: re-add all native tracks
+
+      // TODO: find a way to remove all DASH tracks
+      // (http://stackoverflow.com/questions/29306931/delete-a-texttrack-from-a-video)
+      // (https://github.com/Dash-Industry-Forum/dash.js/issues/488)
+
+      // if the last stream type was a DASH one, try to restore the previous track
+      if (this._lastStreamType === 'application/dash+xml') {
+        self.textTracks.item(this._lastNativeTrack).mode = 'showing';
+      }
     }
+
+    // save the new stream type
+    this._lastStreamType = stream.type;
   },
 
   reload: function() {
