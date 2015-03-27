@@ -33,10 +33,10 @@ Polymer('video-dash', {
     this._getDashPlayer().attachSource(src);
   },
 
-  _videoTracks: undefined,
-  get videoTracks() {
-    if (typeof this._videoTracks === 'undefined') {
-      this._videoTracks = Array
+  _sourceTracks: undefined,
+  get sourceTracks() {
+    if (typeof this._sourceTracks === 'undefined') {
+      this._sourceTracks = Array
         .fromList(this.querySelectorAll('source'))
         .map(function(node) {
           return {
@@ -45,31 +45,13 @@ Polymer('video-dash', {
           };
         });
     }
-    return this._videoTracks;
-  },
-
-  _textTracks: undefined,
-  get textTracks() {
-    if (typeof this._textTracks === 'undefined') {
-      this._textTracks = Array
-        .fromList(this.querySelectorAll('track'))
-        .map(function (node) {
-          return {
-            src: node.getAttribute('src'),
-            type: node.getAttribute('type'),
-            kind: node.getAttribute('kind'),
-            label: node.getAttribute('label'),
-            srclang: node.getAttribute('srclang')
-          };
-        });
-    }
-    return this._textTracks;
+    return this._sourceTracks;
   },
 
   _dashStreams: undefined,
   get dashStreams() {
     if (typeof this._dashStreams === 'undefined') {
-      this._dashStreams = this.videoTracks
+      this._dashStreams = this.sourceTracks
         .filter(function (track) {
           return (track.type === 'application/dash+xml');
         });
@@ -80,7 +62,7 @@ Polymer('video-dash', {
   _nativeStreams: undefined,
   get nativeStreams() {
     if (typeof this._nativeStreams === 'undefined') {
-      this._nativeStreams = this.videoTracks
+      this._nativeStreams = this.sourceTracks
         .filter(function (track) {
           return (track.type !== 'application/dash+xml');
         });
@@ -95,9 +77,8 @@ Polymer('video-dash', {
       return;
     }
 
-    // init the available videos and tracks
-    this._videoTracks = this.videoTracks;
-    this._textTracks = this.textTracks;
+    // init the available videos
+    this._sourceTracks = this.sourceTracks;
 
     // TODO: consider removing every source and text, then enable those on demand
 
@@ -116,24 +97,39 @@ Polymer('video-dash', {
     if (this.dashStreams.length > 1) {
       console.info('More than one MPEG-DASH stream specified, selecting the first one...');
     }
-    this._playDash(this.dashStreams[0].src);
+    this.setSource(this.dashStreams[0].src);
   },
 
-  setSource: function(src, type) {
+  setSource: function(src) {
     // reset the DASH player, if any
     if (this._player) {
       this._player.reset();
       delete this._player;
     }
 
-    // TODO: edit the original _videoTracks
-    if (type === 'application/dash+xml') {
-      // DASH streams override any attached track
-      this._playDash(src);
-      // TODO: disable native tracks (by removing them?)
+    // find the first matching stream
+    var stream = this.sourceTracks
+      .filter(function(s) {
+        return s.src === src;
+      });
+    if (stream.length <= 0) {
+      console.info('No available stream for "%s".', src);
+      return;
+    }
+    stream = stream[0];
+
+    // TODO: edit the original _sourceTracks
+    if (stream.type === 'application/dash+xml') {
+      // DASH streams add new tracks, disable the native ones
+      // this will prevent automatic captioning if the DASH stream doesn't provide any track
+      // TODO: maybe remove (instead of disabling) native tracks by saving them in a temp state?
+      for (var t in this.textTracks) {
+        this.textTracks.item(t).mode = 'disabled';
+      }
+      this._playDash(stream.src);
     } else {
       // enable a native source
-      this.setAttribute('src', src);
+      this.setAttribute('src', stream.src);
       // TODO: enable native tracks (by re-adding them?)
     }
   }
