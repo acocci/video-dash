@@ -17,23 +17,30 @@ var removeNodes = function(elem, querySelection) {
   );
 };
 
+var isUndefined = function(what) {
+  return (typeof what === 'undefined');
+};
+
 Polymer('video-dash', {
 
   _getDashPlayer: function() {
     // create or reuse the DASH player
-    if (typeof this._player === 'undefined') {
+    if (isUndefined(this._player)) {
       var player = this._player = new MediaPlayer(new Dash.di.DashContext());
       player.startup();
       player.attachView(this);
+      player.setAutoPlay(this.autoplay);
     }
     return this._player;
   },
+
+  _dashMimeType: Dash.supportedManifestMimeTypes.mimeType,
 
   _manifest: undefined,
 
   _sourceTracks: undefined,
   get sourceTracks() {
-    if (typeof this._sourceTracks === 'undefined') {
+    if (isUndefined(this._sourceTracks)) {
       this._sourceTracks = Array
         .fromList(this.querySelectorAll('source'))
         .map(function(node) {
@@ -48,10 +55,11 @@ Polymer('video-dash', {
 
   _dashStreams: undefined,
   get dashStreams() {
-    if (typeof this._dashStreams === 'undefined') {
+    var self = this;
+    if (isUndefined(this._dashStreams)) {
       this._dashStreams = this.sourceTracks
         .filter(function (track) {
-          return (track.type === 'application/dash+xml');
+          return (track.type === self._dashMimeType);
         });
     }
     return this._dashStreams;
@@ -59,19 +67,27 @@ Polymer('video-dash', {
 
   _nativeStreams: undefined,
   get nativeStreams() {
-    if (typeof this._nativeStreams === 'undefined') {
+    var self = this;
+    if (isUndefined(this._nativeStreams)) {
       this._nativeStreams = this.sourceTracks
         .filter(function (track) {
-          return (track.type !== 'application/dash+xml');
+          return (track.type !== self._dashMimeType);
         });
     }
     return this._nativeStreams;
   },
 
+  _lastStreamSrc: undefined,
+  get lastStreamSource() {
+    return this._lastStreamSrc;
+  },
+
   domReady: function() {
+    var self = this;
+
     // if MSE is not supported, remove all DASH streams
-    if (typeof MediaSource === 'undefined') {
-      removeNodes(this, 'source[type="application/dash+xml"]');
+    if (isUndefined(MediaSource)) {
+      removeNodes(this, 'source[type="' + self._dashMimeType + '"]');
       return;
     }
 
@@ -114,8 +130,8 @@ Polymer('video-dash', {
     }
     stream = stream[0];
 
-    if (stream.type === 'application/dash+xml') {
-      
+    if (stream.type === self._dashMimeType) {
+
       // start playing the DASH stream
       this._getDashPlayer().attachSource(stream.src);
 
@@ -123,6 +139,9 @@ Polymer('video-dash', {
       this._getDashPlayer().adapter.system.getObject('manifestLoader').subscribe(
         MediaPlayer.dependencies.ManifestLoader.eventList.ENAME_MANIFEST_LOADED, function() { },
         function(event) {
+          if (isUndefined(event.data)) {
+            return;
+          }
           self._manifest = event.data.manifest;
           // find out if there is any subtitle/caption adaptation set
           var dashTextTracks = self._manifest.Period.AdaptationSet.filter(function(adaptation) {
@@ -135,7 +154,9 @@ Polymer('video-dash', {
               if (self.textTracks.item(t).mode === 'showing') {
                 self._lastNativeTrack = t;
               }
-              self.textTracks.item(t).mode = 'disabled';
+              if (self.textTracks.item(t).kind === 'subtitles' || self.textTracks.item(t).kind === 'captions') {
+                self.textTracks.item(t).mode = 'disabled';
+              }
             }
           }
         });
@@ -150,13 +171,14 @@ Polymer('video-dash', {
       // (https://github.com/Dash-Industry-Forum/dash.js/issues/488)
 
       // if the last stream type was a DASH one, try to restore the previous track
-      if (this._lastStreamType === 'application/dash+xml') {
+      if (this._lastStreamType === self._dashMimeType && !isUndefined(this._lastNativeTrack)) {
         self.textTracks.item(this._lastNativeTrack).mode = 'showing';
       }
     }
 
     // save the new stream type
     this._lastStreamType = stream.type;
+    this._lastStreamSrc = stream.src;
   },
 
   reload: function() {
